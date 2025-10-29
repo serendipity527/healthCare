@@ -28,27 +28,63 @@
     </scm>
     <properties>
         <java.version>17</java.version>
+        <langchain4j.version>1.7.1-beta14</langchain4j.version>
+        <langgraph4j.version>1.7.1</langgraph4j.version>
     </properties>
     <dependencies>
+        <!-- Spring Web 核心依赖，用于构建基于Servlet的Web应用 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-web</artifactId>
         </dependency>
+        <!-- Spring WebFlux 依赖，用于响应式Web应用开发 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-webflux</artifactId>
         </dependency>
 
+        <!-- LangChain4j Spring Boot 集成，用于接入 LangChain4j 功能 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-spring-boot-starter</artifactId>
+            <version>${langchain4j.version}</version>
+        </dependency>
+        <!-- Spring WebSocket 依赖，用于 WebSocket 通信支持 -->
+        <dependency>
+            <groupId>org.springframework.boot</groupId>
+            <artifactId>spring-boot-starter-websocket</artifactId>
+        </dependency>
+        <!-- LangGraph4j 核心包，提供 LangGraph4j 主要功能 -->
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-core</artifactId>
+            <version>${langgraph4j.version}</version>
+        </dependency>
+        <!-- LangChain4j-OpenAI Spring Boot 集成，用于接入 OpenAI 模型 -->
+        <dependency>
+            <groupId>dev.langchain4j</groupId>
+            <artifactId>langchain4j-open-ai-spring-boot-starter</artifactId>
+            <version>1.7.1-beta14</version>
+        </dependency>
+        <!-- LangGraph4j 与 LangChain4j 的适配包 -->
+        <dependency>
+            <groupId>org.bsc.langgraph4j</groupId>
+            <artifactId>langgraph4j-langchain4j</artifactId>
+            <version>1.7.1</version>
+        </dependency>
+        <!-- MySQL JDBC 驱动，仅在运行时需要 -->
         <dependency>
             <groupId>com.mysql</groupId>
             <artifactId>mysql-connector-j</artifactId>
             <scope>runtime</scope>
         </dependency>
+        <!-- Spring Boot 测试依赖，用于测试环境 -->
         <dependency>
             <groupId>org.springframework.boot</groupId>
             <artifactId>spring-boot-starter-test</artifactId>
             <scope>test</scope>
         </dependency>
+        <!-- Project Reactor 测试依赖，针对响应式测试环境 -->
         <dependency>
             <groupId>io.projectreactor</groupId>
             <artifactId>reactor-test</artifactId>
