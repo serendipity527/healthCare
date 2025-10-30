@@ -1,0 +1,215 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket 简易对话</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        #chat-window {
+            width: 500px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        #messages {
+            height: 300px;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+            background: #fafafa;
+        }
+        #messages p {
+            margin: 0 0 10px 0;
+            padding: 0;
+            word-wrap: break-word;
+        }
+        #messages .system {
+            font-style: italic;
+            color: #888;
+        }
+        #messages .sent {
+            color: #007bff;
+            text-align: right;
+        }
+        #messages .received {
+            color: #28a745;
+        }
+        #input-area {
+            display: flex;
+            padding: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            padding: 8px;
+            border-radius: 4px;
+        }
+        button {
+            padding: 8px 12px;
+            margin-left: 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+        }
+        #send-btn {
+            background-color: #007bff;
+            color: white;
+        }
+        #connect-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        #disconnect-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+        }
+        #controls {
+            padding: 10px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #eee;
+            text-align: center;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-window">
+    <div id="controls">
+        <button id="connect-btn" onclick="connect()">连接</button>
+        <button id="disconnect-btn" onclick="disconnect()" disabled>断开连接</button>
+    </div>
+
+    <div id="messages">
+        <p class="system">请点击 "连接" 开始对话。</p>
+    </div>
+
+    <div id="input-area">
+        <input type="text" id="message-input" placeholder="输入消息..." disabled onkeydown="checkEnter(event)">
+        <button id="send-btn" onclick="sendMessage()" disabled>发送</button>
+    </div>
+</div>
+
+<script>
+    // DOM 元素引用
+    const connectBtn = document.getElementById('connect-btn');
+    const disconnectBtn = document.getElementById('disconnect-btn');
+    const sendBtn = document.getElementById('send-btn');
+    const messageInput = document.getElementById('message-input');
+    const messagesDiv = document.getElementById('messages');
+
+    let ws = null;
+
+    // **********************************
+    // *** 请修改为你的服务器 WebSocket 地址 ***
+    // **********************************
+    // 使用 ws:// (非加密) 或 wss:// (加密)
+    // 确保路径 "/ws/chat" 与你 Spring Boot 配置中的一致
+    const websocketUrl = "ws://localhost:8080/ws/chat";
+
+    function logMessage(message, type = 'system') {
+        const p = document.createElement('p');
+        p.textContent = message;
+        p.className = type;
+        messagesDiv.appendChild(p);
+        // 自动滚动到底部
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function connect() {
+        if (ws) {
+            logMessage("已连接，请勿重复连接。", 'system');
+            return;
+        }
+
+        try {
+            // 1. 创建 WebSocket 实例
+            ws = new WebSocket(websocketUrl);
+
+            logMessage(`正在连接到 ${websocketUrl}...`, 'system');
+
+            // 2. 监听连接打开
+            ws.onopen = function() {
+                logMessage("连接成功！🎉", 'system');
+                // 更新 UI 状态
+                connectBtn.disabled = true;
+                disconnectBtn.disabled = false;
+                sendBtn.disabled = false;
+                messageInput.disabled = false;
+            };
+
+            // 3. 监听收到消息
+            ws.onmessage = function(event) {
+                // event.data 是服务器发送过来的消息
+                logMessage("收到: " + event.data, 'received');
+            };
+
+            // 4. 监听连接关闭
+            ws.onclose = function() {
+                logMessage("连接已断开。", 'system');
+                // 更新 UI 状态
+                connectBtn.disabled = false;
+                disconnectBtn.disabled = true;
+                sendBtn.disabled = true;
+                messageInput.disabled = true;
+                ws = null; // 清理 ws 实例
+            };
+
+            // 5. 监听错误
+            ws.onerror = function(error) {
+                logMessage("WebSocket 发生错误: " + error.message, 'system');
+                console.error("WebSocket Error: ", error);
+            };
+
+        } catch (error) {
+            logMessage("连接失败: " + error.message, 'system');
+            console.error("Connection failed: ", error);
+        }
+    }
+
+    function disconnect() {
+        if (ws) {
+            ws.close();
+        }
+    }
+
+    function sendMessage() {
+        if (ws && ws.readyState === WebSocket.OPEN) {
+            const message = messageInput.value;
+            if (!message) {
+                return;
+            }
+
+            // 6. 发送消息
+            ws.send(message);
+            logMessage("发送: " + message, 'sent');
+
+            // 清空输入框
+            messageInput.value = '';
+        } else {
+            logMessage("WebSocket 未连接，无法发送。", 'system');
+        }
+    }
+
+    // 允许按回车键发送
+    function checkEnter(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+
+</script>
+
+</body>
+</html>
