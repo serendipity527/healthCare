@@ -1,0 +1,491 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>WebSocket 双模式对话 - 原生 & STOMP</title>
+    <meta charset="UTF-8">
+    <style>
+        body {
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+            margin: 20px;
+            background-color: #f4f4f9;
+        }
+        #chat-window {
+            width: 600px;
+            margin: 0 auto;
+            border: 1px solid #ccc;
+            background: #fff;
+            border-radius: 8px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        #tabs {
+            display: flex;
+            background: #e9ecef;
+            border-bottom: 2px solid #dee2e6;
+        }
+        .tab {
+            flex: 1;
+            padding: 12px;
+            text-align: center;
+            cursor: pointer;
+            background: #e9ecef;
+            border: none;
+            font-size: 14px;
+            font-weight: 600;
+            transition: all 0.3s;
+        }
+        .tab:hover {
+            background: #dee2e6;
+        }
+        .tab.active {
+            background: #fff;
+            color: #007bff;
+            border-bottom: 3px solid #007bff;
+            margin-bottom: -2px;
+        }
+        #messages {
+            height: 350px;
+            padding: 15px;
+            overflow-y: auto;
+            border-bottom: 1px solid #eee;
+            background: #fafafa;
+        }
+        #messages p {
+            margin: 0 0 10px 0;
+            padding: 0;
+            word-wrap: break-word;
+        }
+        #messages .system {
+            font-style: italic;
+            color: #888;
+            font-size: 13px;
+        }
+        #messages .sent {
+            color: #007bff;
+            text-align: right;
+            font-weight: 500;
+        }
+        #messages .received {
+            color: #28a745;
+            font-weight: 500;
+        }
+        #messages .info {
+            color: #17a2b8;
+            font-size: 13px;
+        }
+        #input-area {
+            display: flex;
+            padding: 10px;
+        }
+        #message-input {
+            flex-grow: 1;
+            border: 1px solid #ccc;
+            padding: 10px;
+            border-radius: 4px;
+            font-size: 14px;
+        }
+        button {
+            padding: 10px 16px;
+            margin-left: 8px;
+            border: none;
+            border-radius: 4px;
+            cursor: pointer;
+            font-weight: bold;
+            font-size: 14px;
+            transition: all 0.2s;
+        }
+        button:hover:not(:disabled) {
+            transform: translateY(-1px);
+            box-shadow: 0 2px 5px rgba(0,0,0,0.2);
+        }
+        #send-btn {
+            background-color: #007bff;
+            color: white;
+        }
+        #connect-btn {
+            background-color: #28a745;
+            color: white;
+        }
+        #disconnect-btn {
+            background-color: #dc3545;
+            color: white;
+        }
+        button:disabled {
+            background-color: #ccc;
+            cursor: not-allowed;
+            transform: none;
+            box-shadow: none;
+        }
+        #controls {
+            padding: 15px;
+            background: #f9f9f9;
+            border-bottom: 1px solid #eee;
+            text-align: center;
+        }
+        #status {
+            margin-top: 10px;
+            padding: 8px;
+            border-radius: 4px;
+            font-size: 13px;
+            font-weight: 500;
+        }
+        #status.connected {
+            background: #d4edda;
+            color: #155724;
+        }
+        #status.disconnected {
+            background: #f8d7da;
+            color: #721c24;
+        }
+        #username-input {
+            padding: 8px;
+            border: 1px solid #ccc;
+            border-radius: 4px;
+            margin-right: 8px;
+            width: 120px;
+        }
+    </style>
+</head>
+<body>
+
+<div id="chat-window">
+    <!-- 标签页切换 -->
+    <div id="tabs">
+        <button class="tab active" onclick="switchTab('native')">原生 WebSocket</button>
+        <button class="tab" onclick="switchTab('stomp')">STOMP 协议</button>
+    </div>
+
+    <div id="controls">
+        <div id="native-controls" style="display: block;">
+            <button id="connect-btn-native" onclick="connectNative()">连接 (原生)</button>
+            <button id="disconnect-btn-native" onclick="disconnectNative()" disabled>断开连接</button>
+        </div>
+        <div id="stomp-controls" style="display: none;">
+            <input type="text" id="username-input" placeholder="输入用户名" value="User">
+            <button id="connect-btn-stomp" onclick="connectStomp()">连接 (STOMP)</button>
+            <button id="disconnect-btn-stomp" onclick="disconnectStomp()" disabled>断开连接</button>
+        </div>
+        <div id="status" class="disconnected">未连接</div>
+    </div>
+
+    <div id="messages">
+        <p class="system">👋 欢迎使用 WebSocket 双模式对话</p>
+        <p class="system">请选择通信方式后点击 "连接" 开始对话。</p>
+    </div>
+
+    <div id="input-area">
+        <input type="text" id="message-input" placeholder="输入消息..." disabled onkeydown="checkEnter(event)">
+        <button id="send-btn" onclick="sendMessage()" disabled>发送</button>
+    </div>
+</div>
+
+<!-- 引入 SockJS 和 STOMP.js -->
+<script src="https://cdn.jsdelivr.net/npm/sockjs-client@1/dist/sockjs.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@stomp/stompjs@7/bundles/stomp.umd.min.js"></script>
+
+<script>
+    // ==================== 全局变量 ====================
+    let currentMode = 'native'; // 'native' 或 'stomp'
+    let ws = null; // 原生 WebSocket 实例
+    let stompClient = null; // STOMP 客户端实例
+
+    // DOM 元素引用
+    const messageInput = document.getElementById('message-input');
+    const messagesDiv = document.getElementById('messages');
+    const sendBtn = document.getElementById('send-btn');
+    const statusDiv = document.getElementById('status');
+
+    // 原生 WebSocket 配置
+    const nativeWsUrl = "ws://localhost:8080/ws/chat-raw";
+    
+    // STOMP 配置
+    const stompWsUrl = "http://localhost:8080/ws/chat-stomp";
+
+    // ==================== 标签页切换 ====================
+    function switchTab(mode) {
+        // 如果当前已连接，先断开
+        if (currentMode === 'native' && ws) {
+            disconnectNative();
+        } else if (currentMode === 'stomp' && stompClient) {
+            disconnectStomp();
+        }
+
+        currentMode = mode;
+
+        // 更新标签样式
+        document.querySelectorAll('.tab').forEach(tab => {
+            tab.classList.remove('active');
+        });
+        event.target.classList.add('active');
+
+        // 切换控制面板
+        if (mode === 'native') {
+            document.getElementById('native-controls').style.display = 'block';
+            document.getElementById('stomp-controls').style.display = 'none';
+            logMessage('📡 已切换到原生 WebSocket 模式', 'info');
+        } else {
+            document.getElementById('native-controls').style.display = 'none';
+            document.getElementById('stomp-controls').style.display = 'block';
+            logMessage('📡 已切换到 STOMP 协议模式', 'info');
+        }
+    }
+
+    // ==================== 日志输出 ====================
+    function logMessage(message, type = 'system') {
+        const p = document.createElement('p');
+        p.textContent = message;
+        p.className = type;
+        messagesDiv.appendChild(p);
+        messagesDiv.scrollTop = messagesDiv.scrollHeight;
+    }
+
+    function updateStatus(connected) {
+        if (connected) {
+            statusDiv.textContent = '✅ 已连接';
+            statusDiv.className = 'connected';
+            sendBtn.disabled = false;
+            messageInput.disabled = false;
+        } else {
+            statusDiv.textContent = '❌ 未连接';
+            statusDiv.className = 'disconnected';
+            sendBtn.disabled = true;
+            messageInput.disabled = true;
+        }
+    }
+
+    // ==================== 原生 WebSocket 方法 ====================
+    function connectNative() {
+        if (ws) {
+            logMessage("已连接，请勿重复连接。", 'system');
+            return;
+        }
+
+        try {
+            ws = new WebSocket(nativeWsUrl);
+            logMessage(`🔄 正在连接到 ${nativeWsUrl}...`, 'system');
+
+            ws.onopen = function() {
+                logMessage("✅ 原生 WebSocket 连接成功！", 'system');
+                document.getElementById('connect-btn-native').disabled = true;
+                document.getElementById('disconnect-btn-native').disabled = false;
+                updateStatus(true);
+            };
+
+            ws.onmessage = function(event) {
+                logMessage("← " + event.data, 'received');
+            };
+
+            ws.onclose = function() {
+                logMessage("❌ 原生 WebSocket 连接已断开。", 'system');
+                document.getElementById('connect-btn-native').disabled = false;
+                document.getElementById('disconnect-btn-native').disabled = true;
+                updateStatus(false);
+                ws = null;
+            };
+
+            ws.onerror = function(error) {
+                logMessage("⚠️ WebSocket 发生错误", 'system');
+                console.error("WebSocket Error: ", error);
+            };
+
+        } catch (error) {
+            logMessage("❌ 连接失败: " + error.message, 'system');
+            console.error("Connection failed: ", error);
+        }
+    }
+
+    function disconnectNative() {
+        if (ws) {
+            ws.close();
+        }
+    }
+
+    // ==================== STOMP 方法 ====================
+    function connectStomp() {
+        if (stompClient) {
+            logMessage("已连接，请勿重复连接。", 'system');
+            return;
+        }
+
+        const username = document.getElementById('username-input').value || 'User';
+
+        try {
+            logMessage(`🔄 正在通过 STOMP 连接到 ${stompWsUrl}...`, 'system');
+            
+            // 使用 SockJS 作为传输层
+            const socket = new SockJS(stompWsUrl);
+            
+            // 监听 SockJS 连接状态（用于调试）
+            socket.onopen = function() {
+                console.log('SockJS connection opened');
+            };
+            
+            socket.onerror = function(error) {
+                console.error('SockJS error:', error);
+                logMessage("❌ SockJS 连接错误", 'system');
+            };
+            
+            // 创建 STOMP 客户端
+            stompClient = StompJs.Stomp.over(socket);
+
+            // 启用详细调试输出
+            stompClient.debug = function(str) {
+                console.log('STOMP Debug: ' + str);
+            };
+
+            // 连接到 STOMP 服务器
+            stompClient.connect(
+                {}, // 连接头（可以传递认证信息）
+                // 连接成功回调
+                function(frame) {
+                    console.log('STOMP Connected: ' + frame);
+                    logMessage("✅ STOMP 连接成功！", 'system');
+                    logMessage(`👤 当前用户: ${username}`, 'info');
+                    
+                    document.getElementById('connect-btn-stomp').disabled = true;
+                    document.getElementById('disconnect-btn-stomp').disabled = false;
+                    updateStatus(true);
+
+                    // 订阅消息频道（必须与后端 @SendTo("/topic/messages") 一致）
+                    stompClient.subscribe('/topic/messages', function(messageOutput) {
+                        console.log('Received message:', messageOutput);
+                        try {
+                            const payload = JSON.parse(messageOutput.body);
+                            const content = payload.content || '';
+                            logMessage(`← ${content}`, 'received');
+                        } catch (e) {
+                            console.error('Failed to parse message:', e);
+                            logMessage(`← ${messageOutput.body}`, 'received');
+                        }
+                    });
+
+                    // 发送加入通知（目的地必须与后端 @MessageMapping("/chat") 一致）
+                    try {
+                        stompClient.publish({
+                            destination: '/app/chat',
+                            body: JSON.stringify({
+                                sender: username,
+                                content: '加入了聊天室'
+                            })
+                        });
+                        console.log('Join message sent');
+                    } catch (e) {
+                        console.error('Failed to send join message:', e);
+                    }
+                },
+                // 连接失败回调
+                function(error) {
+                    console.error("STOMP Connection Error: ", error);
+                    logMessage("❌ STOMP 连接失败: " + (error.headers ? error.headers.message : error), 'system');
+                    stompClient = null;
+                    updateStatus(false);
+                    document.getElementById('connect-btn-stomp').disabled = false;
+                    document.getElementById('disconnect-btn-stomp').disabled = true;
+                }
+            );
+
+        } catch (error) {
+            console.error("STOMP Connection Exception: ", error);
+            logMessage("❌ STOMP 连接异常: " + error.message, 'system');
+            stompClient = null;
+            updateStatus(false);
+        }
+    }
+
+    function disconnectStomp() {
+        if (stompClient && stompClient.connected) {
+            const username = document.getElementById('username-input').value || 'User';
+            
+            try {
+                // 发送离开通知
+                stompClient.publish({
+                    destination: '/app/chat',
+                    body: JSON.stringify({
+                        sender: username,
+                        content: '离开了聊天室'
+                    })
+                });
+                console.log('Leave message sent');
+            } catch (e) {
+                console.error('Failed to send leave message:', e);
+            }
+
+            stompClient.disconnect(function() {
+                console.log('STOMP disconnected');
+                logMessage("❌ STOMP 连接已断开。", 'system');
+            });
+
+            stompClient = null;
+            document.getElementById('connect-btn-stomp').disabled = false;
+            document.getElementById('disconnect-btn-stomp').disabled = true;
+            updateStatus(false);
+        } else {
+            logMessage("未连接，无需断开。", 'system');
+        }
+    }
+
+    // ==================== 通用发送消息 ====================
+    function sendMessage() {
+        const message = messageInput.value.trim();
+        if (!message) {
+            return;
+        }
+
+        if (currentMode === 'native') {
+            // 原生 WebSocket 模式
+            if (ws && ws.readyState === WebSocket.OPEN) {
+                ws.send(message);
+                logMessage("→ " + message, 'sent');
+                messageInput.value = '';
+            } else {
+                logMessage("⚠️ WebSocket 未连接，无法发送。", 'system');
+            }
+        } else {
+            // STOMP 模式
+            if (stompClient && stompClient.connected) {
+                const username = document.getElementById('username-input').value || 'User';
+                try {
+                    const messageData = {
+                        sender: username,
+                        content: message
+                    };
+                    console.log('Sending message:', messageData);
+                    
+                    stompClient.publish({
+                        destination: '/app/chat',
+                        body: JSON.stringify(messageData)
+                    });
+                    
+                    logMessage("→ " + message, 'sent');
+                    messageInput.value = '';
+                } catch (e) {
+                    console.error('Failed to send message:', e);
+                    logMessage("⚠️ 发送消息失败: " + e.message, 'system');
+                }
+            } else {
+                logMessage("⚠️ STOMP 未连接，无法发送。", 'system');
+            }
+        }
+    }
+
+    // ==================== 键盘事件 ====================
+    function checkEnter(event) {
+        if (event.key === "Enter") {
+            sendMessage();
+        }
+    }
+
+    // ==================== 页面卸载时断开连接 ====================
+    window.addEventListener('beforeunload', function() {
+        if (ws) {
+            ws.close();
+        }
+        if (stompClient) {
+            stompClient.disconnect();
+        }
+    });
+
+</script>
+
+</body>
+</html>
