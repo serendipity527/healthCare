@@ -1,58 +1,93 @@
 package com.yihu.agent.config;
 
+import lombok.extern.slf4j.Slf4j;
 import org.springframework.context.annotation.Configuration;
+import org.springframework.lang.NonNull;
+import org.springframework.messaging.Message;
+import org.springframework.messaging.MessageChannel;
+import org.springframework.messaging.simp.config.ChannelRegistration;
 import org.springframework.messaging.simp.config.MessageBrokerRegistry;
+import org.springframework.messaging.simp.stomp.StompCommand;
+import org.springframework.messaging.simp.stomp.StompHeaderAccessor;
+import org.springframework.messaging.support.ChannelInterceptor;
+import org.springframework.messaging.support.MessageHeaderAccessor;
 import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBroker;
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
+/**
+ * STOMP WebSocket 配置 - 支持点对点消息
+ * 
+ * 核心功能：
+ * 1. 配置消息代理（/topic 广播，/queue 点对点）
+ * 2. 配置用户目的地前缀（/user）
+ * 3. 用户身份认证（从连接参数获取 userId）
+ * 4. 支持 SockJS 降级方案
+ */
 @Configuration
-@EnableWebSocketMessageBroker // 👈 **魔法开关！** // 它启用了 STOMP 消息代理功能。
+@EnableWebSocketMessageBroker
+@Slf4j
 public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
 
     /**
-     * 配置消息代理（“邮局”的内部规则）
+     * 配置消息代理
+     * 
+     * /topic - 用于广播消息（一对多）
+     * /queue - 用于点对点消息（一对一）
+     * /user - 用户专属队列前缀
      */
     @Override
-    public void configureMessageBroker(MessageBrokerRegistry registry) {
-
-        // 1. 设置“应用目的地”前缀 (客户端 -> 服务器)
-        // 告诉 Spring，凡是目的地以 "/app" 开头的消息，
-        // 都应该被路由到 @MessageMapping 注解的方法。
+    public void configureMessageBroker(@NonNull MessageBrokerRegistry registry) {
+        // 1. 设置应用目的地前缀（客户端发送消息时使用）
         registry.setApplicationDestinationPrefixes("/app");
 
-        // 2. 设置“消息代理”目的地 (服务器 -> 客户端)
-        // 告诉 Spring，凡是目的地以 "/topic" 或 "/queue" 开头的消息，
-        // 都应该路由到 STOMP 的内置内存代理 (Broker) 上。
-        // 代理会负责将消息广播给所有订阅了这些主题的客户端。
+        // 2. 启用简单消息代理
+        // /topic - 广播消息（所有订阅者都会收到）
+        // /queue - 点对点消息（只有目标用户会收到）
         registry.enableSimpleBroker("/topic", "/queue");
 
-        // (可选) 如果你用 RabbitMQ/ActiveMQ 替换内存代理，就这样写:
-        // registry.enableStompBrokerRelay("/topic", "/queue")
-        //     .setRelayHost("localhost")
-        //     .setRelayPort(61613)
-        //     .setClientLogin("guest")
-        //     .setClientPasscode("guest");
+        // 3. 设置用户目的地前缀（重要！用于点对点消息）
+        // 客户端订阅：/user/queue/private
+        // 实际路径：/user/{userId}/queue/private
+        registry.setUserDestinationPrefix("/user");
     }
 
     /**
-     * 注册 STOMP 端点（“邮局”的入口大门）
+     * 注册 STOMP 端点
      */
     @Override
-    public void registerStompEndpoints(StompEndpointRegistry registry) {
-
-        // 1. 注册一个 STOMP 端点
-        // 这是客户端用来连接 WebSocket 服务器的 HTTP URL。
-        // 客户端将首先连接到这个 URL 来进行 WebSocket 握手。
+    public void registerStompEndpoints(@NonNull StompEndpointRegistry registry) {
         registry.addEndpoint("/ws/chat-stomp")
-                // 允许所有来源访问（开发环境配置，生产环境请设置具体域名）
-                // 使用 setAllowedOriginPatterns 支持更灵活的跨域配置，包括 localhost:*
                 .setAllowedOriginPatterns("*")
-                // 2. 启用 SockJS 备选方案
-                // .withSockJS() 是一个关键的"降级"选项。
-                // 如果浏览器不支持原生 WebSocket，它会自动切换到
-                // 长轮询 (Long Polling) 等技术，来模拟 WebSocket 行为。
-                // 这极大地提高了浏览器的兼容性。
                 .withSockJS();
+    }
+
+    /**
+     * 配置客户端入站通道拦截器
+     * 用于从连接参数中提取用户身份信息
+     */
+    @Override
+    public void configureClientInboundChannel(@NonNull ChannelRegistration registration) {
+        registration.interceptors(new ChannelInterceptor() {
+            @Override
+            public Message<?> preSend(@NonNull Message<?> message, @NonNull MessageChannel channel) {
+                StompHeaderAccessor accessor = MessageHeaderAccessor.getAccessor(message, StompHeaderAccessor.class);
+                
+                if (accessor != null && StompCommand.CONNECT.equals(accessor.getCommand())) {
+                    // 从 STOMP 连接头中获取 userId
+                    String userId = accessor.getFirstNativeHeader("userId");
+                    
+                    if (userId != null && !userId.isEmpty()) {
+                        // 设置用户身份（关键！）
+                        accessor.setUser(() -> userId);
+                        log.info("STOMP 用户连接: {}", userId);
+                    } else {
+                        log.warn("STOMP 连接缺少 userId 参数");
+                    }
+                }
+                
+                return message;
+            }
+        });
     }
 }
