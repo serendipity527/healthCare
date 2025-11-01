@@ -387,19 +387,31 @@ public class ChatWebSocketHandler extends TextWebSocketHandler {
      * @param session WebSocket会话
      * @return 用户ID，如果未找到则返回 null
      */
+    /**
+     * 从 WebSocketSession URI 中提取 userId 参数
+     * 支持 ws://localhost:8080/ws/chat-raw?userId=user123 的场景
+     *
+     * @param session WebSocketSession 对象
+     * @return userId，如果不存在则返回 null
+     */
     private String getUserIdFromSession(WebSocketSession session) {
         try {
+            // 获取客户端连接时携带的 URI
             URI uri = session.getUri();
             if (uri != null) {
+                // 解析查询参数（?userId=xxx）
                 Map<String, String> queryParams = UriComponentsBuilder.fromUri(uri)
                         .build()
                         .getQueryParams()
                         .toSingleValueMap();
+                // 返回 userId 参数
                 return queryParams.get("userId");
             }
         } catch (Exception e) {
+            // 如果解析出错，记录错误日志
             log.error("提取 userId 失败", e);
         }
+        // 未获取到 userId，返回 null
         return null;
     }
     
