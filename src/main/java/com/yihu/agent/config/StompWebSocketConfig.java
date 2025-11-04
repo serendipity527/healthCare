@@ -57,6 +57,12 @@ public class StompWebSocketConfig implements WebSocketMessageBrokerConfigurer {
      */
     @Override
     public void registerStompEndpoints(@NonNull StompEndpointRegistry registry) {
+        // AI 对话端点
+        registry.addEndpoint("/ws")
+                .setAllowedOriginPatterns("*")
+                .withSockJS();
+        
+        // 保留原有的聊天端点（兼容性）
         registry.addEndpoint("/ws/chat-stomp")
                 .setAllowedOriginPatterns("*")
                 .withSockJS();

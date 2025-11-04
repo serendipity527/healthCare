@@ -6,7 +6,9 @@ import org.springframework.web.socket.config.annotation.EnableWebSocketMessageBr
 import org.springframework.web.socket.config.annotation.StompEndpointRegistry;
 import org.springframework.web.socket.config.annotation.WebSocketMessageBrokerConfigurer;
 
-@Configuration
+// 注意：此配置类已被 StompWebSocketConfig 替代，暂时禁用以避免冲突
+// 如需启用，请删除 @Configuration 注解前的注释
+//@Configuration
 @EnableWebSocketMessageBroker // 👈 核心注解：启用 WebSocket 消息代理
 public class WebSocketBrokerConfig implements WebSocketMessageBrokerConfigurer {
     @Override

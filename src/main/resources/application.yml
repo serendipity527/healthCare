@@ -1,0 +1,55 @@
+spring:
+  application:
+    name: healthCare
+
+# ============================================
+# LangChain4j AI Configuration
+# ============================================
+langchain4j:
+  open-ai:
+    chat-model:
+      # API Key - 阿里云 DashScope 的 API Key
+      api-key: sk-43070f4cd1074965a93a03d6d5333cd8
+      # Base URL - 阿里云 DashScope 兼容 OpenAI 的端点
+      base-url: https://dashscope.aliyuncs.com/compatible-mode/v1
+      # 模型名称 - 通义千问 Flash 版本（快速响应）
+      model-name: qwen-flash
+      # 温度参数 (0-2)，越高越随机
+      temperature: 0.7
+      # API 调用超时时间
+      timeout: 60s
+      # 失败重试次数
+      max-retries: 3
+      # 是否记录请求日志
+      log-requests: true
+      # 是否记录响应日志
+      log-responses: true
+
+# ============================================
+# HealthCare AI Chat Configuration
+# ============================================
+healthcare:
+  chat:
+    memory:
+      # 对话记忆保留的最大消息数量
+      max-messages: 10
+    # 会话超时时间
+    session-timeout: 30m
+  emergency:
+    # 高危医疗关键词（用于紧急情况识别）
+    keywords: 胸痛,心脏疼,呼吸困难,大出血,昏迷,窒息,中风,失明,心肌梗死,休克,抽搐,吐血,咳血
+
+# ============================================
+# Server Configuration
+# ============================================
+server:
+  port: 8080
+
+# ============================================
+# Logging Configuration
+# ============================================
+logging:
+  level:
+    root: INFO
+    com.yihu.agent: DEBUG
+    dev.langchain4j: DEBUG
